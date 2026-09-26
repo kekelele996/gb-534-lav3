@@ -232,6 +232,38 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 .phase-evidence strong { font-size: .75rem; }
 .phase-evidence > span:not(.phase-badge) { color: var(--muted); font-size: .63rem; }
 
+.phase-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.doubt-inline {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px;
+  font-size: .56rem; font-weight: 750; white-space: nowrap;
+}
+.doubt-inline.open, .doubt-status.open { color: #8a5a00; background: #fdf0d5; }
+.doubt-inline.resolved, .doubt-status.resolved { color: #1f6b3a; background: #e1f2e6; }
+.doubt-status {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: .6rem; font-weight: 750; white-space: nowrap;
+}
+.doubt-status.empty { color: var(--muted); background: #eef1ee; }
+.phase-doubt-list { margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--ink); }
+.doubt-heading h3 { margin: 0; padding-bottom: 8px; border-bottom: 1px solid var(--line-strong); }
+.doubt-heading p { margin: 6px 0 10px; color: var(--muted); font-size: .63rem; line-height: 1.5; }
+.phase-doubt-list .el-alert { margin-bottom: 10px; }
+.phase-doubt-card { margin-bottom: 8px; padding: 10px 12px; background: var(--paper); border: 1px solid var(--line); border-left: 3px solid #c7a45a; }
+.phase-doubt-card > .el-button { margin-top: 4px; }
+.phase-doubt-card header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.doubt-text { margin: 8px 0 6px; color: #33423a; font-size: .72rem; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.doubt-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0 0 6px; }
+.doubt-meta dt { color: var(--muted); font-size: .54rem; text-transform: uppercase; }
+.doubt-meta dd { margin: 1px 0 0; font-size: .6rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.doubt-history-toggle { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 0; color: #315d88; font-size: .6rem; cursor: pointer; }
+.doubt-history { display: grid; gap: 8px; margin: 8px 0 0; padding: 8px 0 2px; list-style: none; border-top: 1px dashed var(--line-strong); }
+.doubt-history li { display: grid; gap: 3px; }
+.doubt-history p { margin: 0; color: #415047; font-size: .65rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.doubt-history small { color: var(--muted); font-size: .56rem; font-variant-numeric: tabular-nums; }
+.doubt-empty { margin: 8px 0; color: var(--muted); font-size: .65rem; }
+.doubt-form { display: grid; gap: 8px; margin-top: 9px; }
+.doubt-form-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
 .audit-filters { display: grid; grid-template-columns: 220px minmax(260px, 1fr) auto; gap: 8px; padding: 14px 0; border-bottom: 1px solid var(--line-strong); }
 .request-code { display: block; overflow: hidden; color: #315d88; font-size: .63rem; text-overflow: ellipsis; white-space: nowrap; }
 .audit-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin: 18px 0 0; padding: 0; background: var(--line); border: 1px solid var(--line); }

@@ -69,6 +69,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(
 		&model.User{}, &model.FermentationVessel{}, &model.CultureRecipe{},
 		&model.SensorSeries{}, &model.DeviationAnalysis{}, &model.AuditLog{},
+		&model.PhaseDoubtNote{}, &model.PhaseDoubtNoteRevision{},
 	); err != nil {
 		t.Fatal(err)
 	}

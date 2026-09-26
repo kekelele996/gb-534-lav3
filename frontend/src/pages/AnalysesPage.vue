@@ -8,6 +8,7 @@ import DeviationBadge from '../components/common/DeviationBadge.vue'
 import KineticsChart from '../components/common/KineticsChart.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import PhaseBadge from '../components/common/PhaseBadge.vue'
+import PhaseDoubtNotes from '../components/common/PhaseDoubtNotes.vue'
 import StateBadge from '../components/common/StateBadge.vue'
 import { useAnalysisRun } from '../hooks/useAnalysisRun'
 import { useAuth } from '../hooks/useAuth'
@@ -22,6 +23,7 @@ const runner = useAnalysisRun()
 const drawer = ref(false)
 const reviewComment = ref('')
 const canSelfConfirm = computed(() => analyses.selected?.initiated_by !== auth.user?.id)
+const doubtFor = (phase: string) => analyses.selected?.phase_doubt_notes?.find((note) => note.phase === phase)
 
 async function run() {
   try { await runner.run(); ElMessage.success('分析已完成或返回现有幂等结果') }
@@ -76,7 +78,12 @@ onMounted(async () => { await Promise.all([series.load(), analyses.load()]); run
             <KineticsChart :aligned="analyses.selected.aligned_curve_json" :height="380" />
             <div class="phase-score-grid">
               <article v-for="score in analyses.selected.phase_scores_json" :key="score.phase">
-                <PhaseBadge :phase="score.phase" />
+                <div class="phase-card-head">
+                  <PhaseBadge :phase="score.phase" />
+                  <span v-if="doubtFor(score.phase)" class="doubt-inline" :class="doubtFor(score.phase)?.status">
+                    {{ doubtFor(score.phase)?.status === 'resolved' ? '已澄清' : '待跟进' }}
+                  </span>
+                </div>
                 <strong>{{ (score.weighted_deviation * 100).toFixed(1) }}%</strong>
                 <dl>
                   <div><dt>曲线</dt><dd>{{ score.curve_distance.toFixed(3) }}</dd></div>
@@ -85,6 +92,7 @@ onMounted(async () => { await Promise.all([series.load(), analyses.load()]); run
                 </dl>
               </article>
             </div>
+            <PhaseDoubtNotes :analysis="analyses.selected" />
             <section v-if="canReview" class="review-band">
               <div><SearchCheck :size="19" /><span><strong>人工审阅</strong><small>确认动作要求与发起人分离</small></span></div>
               <el-input v-model="reviewComment" placeholder="审阅结论（可选）" />

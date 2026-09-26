@@ -14,7 +14,7 @@ docker compose up -d
 - 发酵罐：维护容积、位置、责任团队和传感器通道，查看最近数据质量与偏差摘要。
 - 培养配方：管理四阶段边界、参考曲线、通道容差和版本生命周期，支持复制版本。
 - 传感器时序：导入多通道 JSON 数据，执行排序去重、缺失率检查、稳健缩放和状态迁移。
-- 偏差分析：冻结配方与时序输入，执行阶段约束 DTW，展示阶段证据、对齐曲线和疑似原因。
+- 偏差分析：冻结配方与时序输入，执行阶段约束 DTW，展示阶段证据、对齐曲线和疑似原因，并在阶段证据旁记录可追踪的疑点说明。
 - 复核与审计：强制发起人与确认人分离，记录 request ID、前后快照、输入哈希、算法版本和耗时。
 - 平台保护：JWT、RBAC、统一错误响应、登录/导入/分析限流、幂等键和并发条件更新。
 
@@ -103,6 +103,7 @@ docker compose up -d
 | `GET/POST` | `/api/v1/deviation-analyses` | 分析列表/幂等运行 |
 | `GET` | `/api/v1/deviation-analyses/:id` | 分析详情与冻结证据 |
 | `POST` | `/api/v1/deviation-analyses/:id/transition` | 复核、确认、调查或作废 |
+| `POST` | `/api/v1/deviation-analyses/:id/phase-notes` | 在阶段证据旁填写/更新疑点说明（待跟进、已澄清） |
 | `POST` | `/api/v1/deviation-analyses/:id/replay` | 冻结输入确定性重放 |
 | `GET` | `/api/v1/audit-logs` | 审计筛选 |
 | `GET` | `/api/v1/meta/enums` | 共享枚举元数据 |
@@ -128,6 +129,14 @@ queued -> analyzing -> completed -> reviewed -> confirmed
 ```
 
 算法按时间戳排序并去重，保留缺失率与长间隔证据；使用中位数和四分位距进行稳健缩放，再在 `lag/growth/production/harvest` 阶段边界内做确定性 DTW。结果包含持续时间、斜率、峰值时刻、曲线距离、多通道加权偏差、对齐点与原因规则命中。冻结输入和算法版本可重放，历史结果不会被覆盖。
+
+## 阶段疑点说明
+
+- 复核人和工艺科学家（`analysis:review` 权限）可在已有阶段证据旁为每个阶段写一条疑点说明，状态为 `open`（待跟进）或 `resolved`（已澄清）。
+- 同一分析同一阶段只有一条说明：再次提交覆盖最新正文与状态，但首报人和最早记录时间保持不变；每次提交都在修订记录中追加操作者与时间，仅新增不可改。
+- 说明随分析详情与列表的 `phase_doubt_notes` 一并返回；写入不触碰 `phase_scores_json`、`aligned_curve_json`、`input_hash` 等冻结评分与输入指纹。
+- 分析作废（`voided`）后说明一并冻结，不再接受修改；审计中心可按 `action=phase_doubt_note` 查看每次写入的前后快照。
+- 共享枚举 `PhaseDoubtStatus = open | resolved`：后端 `backend/internal/constants/phase_doubt_status.go` 与 `/meta/enums` 的 `phase_doubt_statuses`，前端 `frontend/src/types/enums/phase-doubt-status.ts`；疑点说明组件为 `frontend/src/components/common/PhaseDoubtNotes.vue`，被分析页与 `AnalysisExplanationDrawer` 共用。
 
 ## 共享枚举位置
 

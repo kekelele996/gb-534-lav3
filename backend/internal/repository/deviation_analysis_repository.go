@@ -1,6 +1,7 @@
 package repository
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ type DeviationAnalysisRepository interface {
 	Transition(context.Context, uint, string, string, map[string]any) (bool, error)
 	Complete(context.Context, uint, map[string]any) (bool, error)
 	SetReplayVerified(context.Context, uint, bool) error
+	UpsertPhaseDoubtNote(context.Context, *model.PhaseDoubtNote, *model.PhaseDoubtNoteRevision) (bool, error)
 }
 type deviationAnalysisRepository struct{ db *gorm.DB }
 func NewDeviationAnalysisRepository(db *gorm.DB) DeviationAnalysisRepository {
@@ -34,6 +36,9 @@ func (r *deviationAnalysisRepository) GetByID(ctx context.Context, id uint, prel
 	if preload {
 		query = query.Preload("SensorSeries").Preload("SensorSeries.Vessel").Preload("SensorSeries.Recipe")
 	}
+	query = query.Preload("PhaseDoubtNotes.Revisions", func(db *gorm.DB) *gorm.DB {
+		return db.Order("recorded_at ASC, id ASC")
+	})
 	if err := query.First(&analysis, id).Error; err != nil {
 		return model.DeviationAnalysis{}, fmt.Errorf("find deviation analysis %d: %w", id, err)
 	}
@@ -78,6 +83,9 @@ func (r *deviationAnalysisRepository) List(ctx context.Context, query dto.Deviat
 	var analyses []model.DeviationAnalysis
 	offset := (query.Page - 1) * query.PageSize
 	if err := base.Preload("SensorSeries").Preload("SensorSeries.Vessel").Preload("SensorSeries.Recipe").
+		Preload("PhaseDoubtNotes.Revisions", func(db *gorm.DB) *gorm.DB {
+			return db.Order("recorded_at ASC, id ASC")
+		}).
 		Order("analyzed_at DESC, id DESC").Limit(query.PageSize).Offset(offset).Find(&analyses).Error; err != nil {
 		return nil, 0, fmt.Errorf("list deviation analyses: %w", err)
 	}
@@ -115,6 +123,50 @@ func (r *deviationAnalysisRepository) SetReplayVerified(ctx context.Context, id 
 	}
 	return nil
 }
+
+// UpsertPhaseDoubtNote 在同一事务内写入某阶段的最新疑点说明并追加一条不可变修订记录。
+// 返回 created=true 表示该阶段此前没有说明；created=false 时保留原首报人与最早记录时间。
+func (r *deviationAnalysisRepository) UpsertPhaseDoubtNote(
+	ctx context.Context, note *model.PhaseDoubtNote, revision *model.PhaseDoubtNoteRevision,
+) (bool, error) {
+	created := false
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.PhaseDoubtNote
+		findErr := tx.Where("analysis_id = ? AND phase = ?", note.AnalysisID, note.Phase).First(&existing).Error
+		switch {
+		case findErr == nil:
+			note.ID = existing.ID
+			note.CreatedBy = existing.CreatedBy
+			note.CreatedByName = existing.CreatedByName
+			note.FirstRecordedAt = existing.FirstRecordedAt
+			if err := tx.Model(&model.PhaseDoubtNote{}).Where("id = ?", existing.ID).Updates(map[string]any{
+				"status": note.Status, "note": note.Note, "updated_by": note.UpdatedBy,
+				"updated_by_name": note.UpdatedByName, "updated_at": note.UpdatedAt,
+			}).Error; err != nil {
+				return fmt.Errorf("update phase doubt note: %w", err)
+			}
+		case errors.Is(findErr, gorm.ErrRecordNotFound):
+			if err := tx.Create(note).Error; err != nil {
+				return fmt.Errorf("create phase doubt note: %w", err)
+			}
+			created = true
+		default:
+			return fmt.Errorf("find phase doubt note: %w", findErr)
+		}
+		revision.NoteID = note.ID
+		revision.AnalysisID = note.AnalysisID
+		revision.Phase = note.Phase
+		if err := tx.Create(revision).Error; err != nil {
+			return fmt.Errorf("record phase doubt note revision: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return created, nil
+}
+
 type UserRepository interface {
 	FindByUsername(context.Context, string) (model.User, error)
 }

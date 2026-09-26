@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { FileSearch, X } from 'lucide-vue-next'
+import { AlertTriangle, CheckCircle2, FileSearch, X } from 'lucide-vue-next'
 import type { DeviationAnalysis } from '../../types/deviation-analysis'
 import DeviationBadge from './DeviationBadge.vue'
 import PhaseBadge from './PhaseBadge.vue'
+import PhaseDoubtNotes from './PhaseDoubtNotes.vue'
 
 const props = defineProps<{ modelValue: boolean; analysis: DeviationAnalysis | null }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const scores = computed(() => props.analysis?.phase_scores_json ?? [])
+const doubtFor = (phase: string) => props.analysis?.phase_doubt_notes?.find((note) => note.phase === phase)
 </script>
 <template>
   <el-drawer :model-value="modelValue" size="min(680px, 94vw)" :with-header="false" @close="emit('update:modelValue', false)">
@@ -24,8 +26,13 @@ const scores = computed(() => props.analysis?.phase_scores_json ?? [])
           <strong>{{ (score.weighted_deviation * 100).toFixed(1) }}%</strong>
           <span>曲线距离 {{ score.curve_distance.toFixed(3) }}</span>
           <span>斜率偏差 {{ score.slope_deviation.toFixed(3) }}</span>
+          <span v-if="doubtFor(score.phase)" class="doubt-inline" :class="doubtFor(score.phase)?.status">
+            <component :is="doubtFor(score.phase)?.status === 'resolved' ? CheckCircle2 : AlertTriangle" :size="12" />
+            {{ doubtFor(score.phase)?.status === 'resolved' ? '疑点已澄清' : '疑点待跟进' }}
+          </span>
         </div>
       </section>
+      <PhaseDoubtNotes :analysis="analysis" />
       <section class="drawer-section">
         <h3>疑似原因规则命中</h3>
         <p v-if="!analysis.suspected_causes_json.length" class="muted">未命中高置信度规则。</p>

@@ -1,6 +1,7 @@
 package service
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -199,6 +200,79 @@ func (s *DeviationAnalysisService) Transition(
 	}
 	return s.Get(ctx, id)
 }
+func (s *DeviationAnalysisService) UpsertPhaseDoubtNote(
+	ctx context.Context, id uint, request dto.UpsertPhaseDoubtNoteRequest, actor util.Actor,
+) (dto.DeviationAnalysisResponse, error) {
+	analysis, err := s.analyses.GetByID(ctx, id, true)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return dto.DeviationAnalysisResponse{}, util.NotFound("deviation analysis")
+		}
+		return dto.DeviationAnalysisResponse{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to load deviation analysis", err)
+	}
+	if analysis.AnalysisState == string(constants.AnalysisVoided) {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeStateTransition,
+			"voided analysis results are frozen and no longer accept phase doubt notes")
+	}
+	if !analysisHasPhaseEvidence(analysis.PhaseScoresJSON, request.Phase) {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeStateTransition,
+			"phase evidence is not available for "+request.Phase+" on this analysis")
+	}
+	noteText := strings.TrimSpace(request.Note)
+	if noteText == "" {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusBadRequest, util.CodeValidation, "phase doubt note content is required")
+	}
+	var before any
+	existingNote := findPhaseDoubtNote(analysis, request.Phase)
+	if existingNote != nil {
+		before = *existingNote
+	}
+	now := s.now()
+	note := model.PhaseDoubtNote{
+		AnalysisID: id, Phase: request.Phase, Status: request.Status,
+		Note: noteText, UpdatedBy: actor.UserID, UpdatedByName: actor.Username, UpdatedAt: now,
+		CreatedBy: actor.UserID, CreatedByName: actor.Username, FirstRecordedAt: now,
+	}
+	revision := model.PhaseDoubtNoteRevision{
+		Status: request.Status, Note: noteText,
+		ActorID: actor.UserID, ActorName: actor.Username, RecordedAt: now,
+	}
+	if _, err := s.analyses.UpsertPhaseDoubtNote(ctx, &note, &revision); err != nil {
+		return dto.DeviationAnalysisResponse{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to store phase doubt note", err)
+	}
+	if err := recordAudit(ctx, s.audits, actor, "deviation_analysis", id, "phase_doubt_note", before, note,
+		analysis.InputHash, analysis.AlgorithmVersion, 0); err != nil {
+		return dto.DeviationAnalysisResponse{}, err
+	}
+	return s.Get(ctx, id)
+}
+
+// analysisHasPhaseEvidence 只允许在算法已产出的阶段证据旁标注疑点，
+// 评分 JSON 与输入哈希都不参与修改。
+func analysisHasPhaseEvidence(phaseScoresJSON, phase string) bool {
+	var scores []struct {
+		Phase string `json:"phase"`
+	}
+	if err := json.Unmarshal([]byte(phaseScoresJSON), &scores); err != nil {
+		return false
+	}
+	for _, score := range scores {
+		if score.Phase == phase {
+			return true
+		}
+	}
+	return false
+}
+
+func findPhaseDoubtNote(analysis model.DeviationAnalysis, phase string) *model.PhaseDoubtNote {
+	for index := range analysis.PhaseDoubtNotes {
+		if analysis.PhaseDoubtNotes[index].Phase == phase {
+			return &analysis.PhaseDoubtNotes[index]
+		}
+	}
+	return nil
+}
+
 func (s *DeviationAnalysisService) Replay(
 	ctx context.Context, id uint, actor util.Actor,
 ) (dto.DeviationAnalysisResponse, error) {

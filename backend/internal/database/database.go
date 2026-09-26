@@ -65,6 +65,7 @@ func migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&model.User{}, &model.FermentationVessel{}, &model.CultureRecipe{},
 		&model.SensorSeries{}, &model.DeviationAnalysis{}, &model.AuditLog{},
+		&model.PhaseDoubtNote{}, &model.PhaseDoubtNoteRevision{},
 	); err != nil {
 		return fmt.Errorf("migrate database schema: %w", err)
 	}

@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { FileSearch, X } from 'lucide-vue-next'
-import type { DeviationAnalysis } from '../../types/deviation-analysis'
+import type { DeviationAnalysis, PhaseDoubtNote } from '../../types/deviation-analysis'
+import { doubtStatusLabels, type DoubtStatus } from '../../types/enums/doubt-status'
 import DeviationBadge from './DeviationBadge.vue'
 import PhaseBadge from './PhaseBadge.vue'
 
 const props = defineProps<{ modelValue: boolean; analysis: DeviationAnalysis | null }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const scores = computed(() => props.analysis?.phase_scores_json ?? [])
+const doubtFor = (phase: string): PhaseDoubtNote | undefined =>
+  props.analysis?.phase_doubt_notes?.find((note) => note.phase === phase)
+const formatTime = (value: string) => new Date(value).toLocaleString()
 </script>
 <template>
   <el-drawer :model-value="modelValue" size="min(680px, 94vw)" :with-header="false" @close="emit('update:modelValue', false)">
@@ -24,6 +28,16 @@ const scores = computed(() => props.analysis?.phase_scores_json ?? [])
           <strong>{{ (score.weighted_deviation * 100).toFixed(1) }}%</strong>
           <span>曲线距离 {{ score.curve_distance.toFixed(3) }}</span>
           <span>斜率偏差 {{ score.slope_deviation.toFixed(3) }}</span>
+          <p v-if="doubtFor(score.phase)" class="phase-doubt-readonly">
+            <el-tag
+              size="small"
+              :type="doubtFor(score.phase)?.status === 'clarified' ? 'success' : 'warning'"
+              effect="plain"
+              disable-transitions
+            >{{ doubtStatusLabels[(doubtFor(score.phase)?.status ?? 'pending_followup') as DoubtStatus] }}</el-tag>
+            <span>{{ doubtFor(score.phase)?.content }}</span>
+            <small>{{ formatTime(doubtFor(score.phase)!.first_noted_at) }} 由 {{ doubtFor(score.phase)?.first_noted_by_name }} 首次记录 · 最近更新 {{ formatTime(doubtFor(score.phase)!.latest_update_at) }}</small>
+          </p>
         </div>
       </section>
       <section class="drawer-section">

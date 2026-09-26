@@ -199,6 +199,74 @@ func (s *DeviationAnalysisService) Transition(
 	}
 	return s.Get(ctx, id)
 }
+func (s *DeviationAnalysisService) SavePhaseDoubtNote(
+	ctx context.Context, id uint, request dto.PhaseDoubtNoteRequest, actor util.Actor,
+) (dto.DeviationAnalysisResponse, error) {
+	content := strings.TrimSpace(request.Content)
+	if content == "" {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusBadRequest, util.CodeValidation, "doubt note content must not be blank")
+	}
+	if len(content) > 1000 {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusBadRequest, util.CodeValidation, "doubt note content must not exceed 1000 characters")
+	}
+	phase := constants.FermentationPhase(request.Phase)
+	if !phase.Valid() {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusBadRequest, util.CodeValidation, "unknown fermentation phase "+request.Phase)
+	}
+	status := constants.DoubtStatus(request.Status)
+	if !status.Valid() {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusBadRequest, util.CodeValidation, "unknown doubt status "+request.Status)
+	}
+	analysis, err := s.analyses.GetByID(ctx, id, false)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return dto.DeviationAnalysisResponse{}, util.NotFound("deviation analysis")
+		}
+		return dto.DeviationAnalysisResponse{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to load deviation analysis", err)
+	}
+	if analysis.AnalysisState == string(constants.AnalysisVoided) {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeStateTransition,
+			"voided analysis results are frozen and no longer accept doubt note changes")
+	}
+	if analysis.AnalysisState == string(constants.AnalysisQueued) ||
+		analysis.AnalysisState == string(constants.AnalysisAnalyzing) ||
+		analysis.AnalysisState == string(constants.AnalysisFailed) {
+		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeStateTransition,
+			"phase doubt notes can only be attached to completed analysis results")
+	}
+	now := s.now()
+	var before *dto.PhaseDoubtNoteResponse
+	for _, note := range analysis.PhaseDoubtNotes {
+		if note.Phase == string(phase) {
+			response := dto.NewPhaseDoubtNoteResponse(note)
+			before = &response
+			break
+		}
+	}
+	note, err := s.analyses.UpsertPhaseDoubtNote(ctx, repository.PhaseDoubtNoteInput{
+		DeviationAnalysisID: id, Phase: string(phase), Content: content, Status: string(status),
+		ActorID: actor.UserID, ActorName: actor.Username, Now: now,
+	})
+	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueConstraintError(err) {
+			return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeConflict, "phase doubt note was updated concurrently")
+		}
+		return dto.DeviationAnalysisResponse{}, util.WrapError(http.StatusInternalServerError, util.CodeInternal, "unable to store phase doubt note", err)
+	}
+	after := dto.NewPhaseDoubtNoteResponse(note)
+	if before == nil {
+		if err := recordAudit(ctx, s.audits, actor, "deviation_analysis", id, "phase_doubt_note_add", nil, after,
+			analysis.InputHash, analysis.AlgorithmVersion, 0); err != nil {
+			return dto.DeviationAnalysisResponse{}, err
+		}
+	} else {
+		if err := recordAudit(ctx, s.audits, actor, "deviation_analysis", id, "phase_doubt_note_update", before, after,
+			analysis.InputHash, analysis.AlgorithmVersion, 0); err != nil {
+			return dto.DeviationAnalysisResponse{}, err
+		}
+	}
+	return s.Get(ctx, id)
+}
 func (s *DeviationAnalysisService) Replay(
 	ctx context.Context, id uint, actor util.Actor,
 ) (dto.DeviationAnalysisResponse, error) {
@@ -237,4 +305,9 @@ func (s *DeviationAnalysisService) Replay(
 		return dto.DeviationAnalysisResponse{}, util.NewError(http.StatusConflict, util.CodeConflict, "replay result differs from the frozen historical result")
 	}
 	return s.Get(ctx, id)
+}
+
+// isUniqueConstraintError 兜底识别 SQLite 的 UNIQUE 冲突（测试与 runtime smoke 未启用 GORM 错误翻译）。
+func isUniqueConstraintError(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "unique constraint")
 }

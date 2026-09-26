@@ -64,7 +64,8 @@ func Open(cfg config.Config) (*gorm.DB, error) {
 func migrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&model.User{}, &model.FermentationVessel{}, &model.CultureRecipe{},
-		&model.SensorSeries{}, &model.DeviationAnalysis{}, &model.AuditLog{},
+		&model.SensorSeries{}, &model.DeviationAnalysis{}, &model.PhaseDoubtNote{},
+		&model.PhaseDoubtNoteHistory{}, &model.AuditLog{},
 	); err != nil {
 		return fmt.Errorf("migrate database schema: %w", err)
 	}

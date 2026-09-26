@@ -103,6 +103,7 @@ docker compose up -d
 | `GET/POST` | `/api/v1/deviation-analyses` | 分析列表/幂等运行 |
 | `GET` | `/api/v1/deviation-analyses/:id` | 分析详情与冻结证据 |
 | `POST` | `/api/v1/deviation-analyses/:id/transition` | 复核、确认、调查或作废 |
+| `PUT` | `/api/v1/deviation-analyses/:id/phase-doubt-notes` | 在阶段证据旁填写/更新疑点说明（待跟进/已澄清） |
 | `POST` | `/api/v1/deviation-analyses/:id/replay` | 冻结输入确定性重放 |
 | `GET` | `/api/v1/audit-logs` | 审计筛选 |
 | `GET` | `/api/v1/meta/enums` | 共享枚举元数据 |
@@ -128,6 +129,15 @@ queued -> analyzing -> completed -> reviewed -> confirmed
 ```
 
 算法按时间戳排序并去重，保留缺失率与长间隔证据；使用中位数和四分位距进行稳健缩放，再在 `lag/growth/production/harvest` 阶段边界内做确定性 DTW。结果包含持续时间、斜率、峰值时刻、曲线距离、多通道加权偏差、对齐点与原因规则命中。冻结输入和算法版本可重放，历史结果不会被覆盖。
+
+### 阶段疑点说明
+
+偏差分析确认后，复核人和工艺科学家可在任意阶段证据旁记录一条疑点说明（`pending_followup` 待跟进 / `clarified` 已澄清），随分析详情与列表返回，便于按阶段追踪而不是写进整条复核意见：
+
+- 每个阶段每个分析只保留一条当前说明；同一阶段再次提交时覆盖为最新内容，但最早记录时间与首次记录人保持不变。
+- 每次更新都会在只增的历史表中留下内容、状态、版本、操作者与时间，可展开查看更新轨迹。
+- 疑点说明不触碰原始阶段评分、对齐结果、输入哈希与冻结快照，也不改变分析状态；作废（`voided`）结果不再接受任何修改，记录只读保留。
+- 写入需 `analysis:review` 权限（复核人、工艺科学家、管理员），数据分析师与审计员只读；每次新增和更新均记录审计日志（`phase_doubt_note_add`/`phase_doubt_note_update`）。
 
 ## 共享枚举位置
 

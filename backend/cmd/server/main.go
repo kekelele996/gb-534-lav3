@@ -86,6 +86,7 @@ func run(logger *slog.Logger) error {
 			"series_states":       constants.SeriesStateValues(),
 			"recipe_states":       constants.RecipeStateValues(),
 			"analysis_states":     constants.AnalysisStateValues(),
+			"doubt_statuses":      constants.DoubtStatusValues(),
 			"roles":               constants.RoleValues(),
 		})
 	})

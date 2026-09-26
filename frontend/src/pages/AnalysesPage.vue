@@ -8,6 +8,7 @@ import DeviationBadge from '../components/common/DeviationBadge.vue'
 import KineticsChart from '../components/common/KineticsChart.vue'
 import PageHeader from '../components/common/PageHeader.vue'
 import PhaseBadge from '../components/common/PhaseBadge.vue'
+import PhaseDoubtNote from '../components/common/PhaseDoubtNote.vue'
 import StateBadge from '../components/common/StateBadge.vue'
 import { useAnalysisRun } from '../hooks/useAnalysisRun'
 import { useAuth } from '../hooks/useAuth'
@@ -22,6 +23,10 @@ const runner = useAnalysisRun()
 const drawer = ref(false)
 const reviewComment = ref('')
 const canSelfConfirm = computed(() => analyses.selected?.initiated_by !== auth.user?.id)
+const noteLocked = computed(() => analyses.selected?.analysis_state === 'voided')
+function noteFor(phase: string) {
+  return analyses.selected?.phase_doubt_notes?.find((note) => note.phase === phase) ?? null
+}
 
 async function run() {
   try { await runner.run(); ElMessage.success('分析已完成或返回现有幂等结果') }
@@ -85,6 +90,25 @@ onMounted(async () => { await Promise.all([series.load(), analyses.load()]); run
                 </dl>
               </article>
             </div>
+            <section v-if="analyses.selected.phase_scores_json.length" class="doubt-band">
+              <div class="doubt-band-heading">
+                <h3>阶段疑点说明</h3>
+                <small v-if="noteLocked">结果已作废，说明记录只读；同阶段再次提交保留最新内容与最早记录时间。</small>
+                <small v-else-if="canReview">复核人与工艺科学家可在各阶段证据旁记录疑点，标注待跟进或已澄清。</small>
+                <small v-else>仅展示，填写需复核人或工艺科学家权限。</small>
+              </div>
+              <div class="doubt-grid">
+                <article v-for="score in analyses.selected.phase_scores_json" :key="`doubt-${score.phase}`">
+                  <PhaseDoubtNote
+                    :analysis-id="analyses.selected.id"
+                    :phase="score.phase"
+                    :note="noteFor(score.phase)"
+                    :editable="canReview && !noteLocked"
+                    :voided="noteLocked"
+                  />
+                </article>
+              </div>
+            </section>
             <section v-if="canReview" class="review-band">
               <div><SearchCheck :size="19" /><span><strong>人工审阅</strong><small>确认动作要求与发起人分离</small></span></div>
               <el-input v-model="reviewComment" placeholder="审阅结论（可选）" />

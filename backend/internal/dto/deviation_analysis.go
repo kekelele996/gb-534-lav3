@@ -11,6 +11,47 @@ type DeviationAnalysisTransitionRequest struct {
 	ToState string `json:"to_state" binding:"required,oneof=reviewed confirmed investigating voided"`
 	Comment string `json:"comment" binding:"omitempty,max=1000"`
 }
+type PhaseDoubtNoteRequest struct {
+	Phase   string `json:"phase" binding:"required,oneof=lag growth production harvest"`
+	Status  string `json:"status" binding:"required,oneof=pending_followup clarified"`
+	Content string `json:"content" binding:"required,max=1000"`
+}
+type PhaseDoubtNoteHistoryResponse struct {
+	Content        string    `json:"content"`
+	Status         string    `json:"status"`
+	Revision       int       `json:"revision"`
+	RecordedAt     time.Time `json:"recorded_at"`
+	RecordedBy     uint      `json:"recorded_by"`
+	RecordedByName string    `json:"recorded_by_name"`
+}
+type PhaseDoubtNoteResponse struct {
+	Phase            string                         `json:"phase"`
+	Content          string                         `json:"content"`
+	Status           string                         `json:"status"`
+	FirstNotedAt     time.Time                      `json:"first_noted_at"`
+	FirstNotedBy     uint                           `json:"first_noted_by"`
+	FirstNotedByName string                         `json:"first_noted_by_name"`
+	LatestUpdateAt   time.Time                      `json:"latest_update_at"`
+	UpdatedBy        uint                           `json:"updated_by"`
+	UpdatedByName    string                         `json:"updated_by_name"`
+	Revision         int                            `json:"revision"`
+	History          []PhaseDoubtNoteHistoryResponse `json:"history"`
+}
+func NewPhaseDoubtNoteResponse(note model.PhaseDoubtNote) PhaseDoubtNoteResponse {
+	response := PhaseDoubtNoteResponse{
+		Phase: note.Phase, Content: note.Content, Status: note.Status,
+		FirstNotedAt: note.FirstNotedAt, FirstNotedBy: note.FirstNotedBy, FirstNotedByName: note.FirstNotedByName,
+		LatestUpdateAt: note.LatestUpdateAt, UpdatedBy: note.UpdatedBy, UpdatedByName: note.UpdatedByName,
+		Revision: note.Revision, History: make([]PhaseDoubtNoteHistoryResponse, 0, len(note.History)),
+	}
+	for _, entry := range note.History {
+		response.History = append(response.History, PhaseDoubtNoteHistoryResponse{
+			Content: entry.Content, Status: entry.Status, Revision: entry.Revision,
+			RecordedAt: entry.RecordedAt, RecordedBy: entry.RecordedBy, RecordedByName: entry.RecordedByName,
+		})
+	}
+	return response
+}
 type DeviationAnalysisQuery struct {
 	SensorSeriesID, RecipeID uint
 	State, Level, Initiator  string
@@ -39,6 +80,7 @@ type DeviationAnalysisResponse struct {
 	ReviewComment        string                `json:"review_comment,omitempty"`
 	ReplayVerified       *bool                 `json:"replay_verified,omitempty"`
 	SensorSeries         *SensorSeriesResponse `json:"sensor_series,omitempty"`
+	PhaseDoubtNotes      []PhaseDoubtNoteResponse `json:"phase_doubt_notes"`
 	CreatedAt            time.Time             `json:"created_at"`
 	UpdatedAt            time.Time             `json:"updated_at"`
 }
@@ -65,6 +107,10 @@ func NewDeviationAnalysisResponse(analysis model.DeviationAnalysis) DeviationAna
 	if analysis.SensorSeries.ID != 0 {
 		s := NewSensorSeriesResponse(analysis.SensorSeries)
 		response.SensorSeries = &s
+	}
+	response.PhaseDoubtNotes = make([]PhaseDoubtNoteResponse, 0, len(analysis.PhaseDoubtNotes))
+	for _, note := range analysis.PhaseDoubtNotes {
+		response.PhaseDoubtNotes = append(response.PhaseDoubtNotes, NewPhaseDoubtNoteResponse(note))
 	}
 	return response
 }

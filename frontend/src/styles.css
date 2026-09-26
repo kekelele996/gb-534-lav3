@@ -218,6 +218,29 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
 }
 .review-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 7px; }
 
+.doubt-band { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-strong); }
+.doubt-band-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.doubt-band-heading h3 { margin: 0; font-size: .82rem; }
+.doubt-band-heading small { color: var(--muted); font-size: .62rem; }
+.doubt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.doubt-grid > article { min-width: 0; padding: 10px 12px; background: #f7f5ef; border: 1px solid var(--line); border-radius: 5px; }
+.doubt-note { display: grid; gap: 7px; }
+.doubt-note-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.doubt-note-title { display: inline-flex; align-items: center; gap: 5px; font-size: .62rem; font-weight: 750; color: var(--muted); text-transform: uppercase; }
+.doubt-note-head .el-button { margin-left: auto; }
+.doubt-note-content { margin: 0; color: #3f4a44; font-size: .71rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.doubt-note-empty { margin: 0; color: var(--muted); font-size: .64rem; line-height: 1.5; }
+.doubt-note-meta { display: grid; gap: 3px; color: var(--muted); font-size: .58rem; line-height: 1.4; }
+.doubt-note-meta .el-button { justify-self: start; height: auto; padding: 0; font-size: .58rem; }
+.doubt-history { display: grid; gap: 6px; margin: 2px 0 0; padding: 8px; list-style: none; background: var(--paper); border: 1px dashed var(--line-strong); border-radius: 4px; }
+.doubt-history li { display: grid; gap: 3px; }
+.doubt-history .doubt-history-text { color: #3f4a44; font-size: .66rem; line-height: 1.5; overflow-wrap: anywhere; }
+.doubt-history small { color: var(--muted); font-size: .56rem; }
+.doubt-dialog-phase { margin-bottom: 12px; }
+.phase-doubt-readonly { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; grid-column: 1 / -1; margin: 2px 0 4px; padding: 7px 9px; background: #f7f5ef; border-left: 2px solid #c8a44d; border-radius: 3px; }
+.phase-doubt-readonly span { flex: 1 1 100%; color: #3f4a44; font-size: .68rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.phase-doubt-readonly small { flex: 1 1 100%; color: var(--muted); font-size: .56rem; }
+
 .drawer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 2px solid var(--ink); }
 .drawer-heading > div { display: flex; align-items: center; gap: 9px; }
 .drawer-heading span { display: grid; }
@@ -316,6 +339,7 @@ code { font-family: "SFMono-Regular", Consolas, monospace; }
   .quality-band > div:nth-child(2) { border-right: 0; }
   .quality-band > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .phase-score-grid { grid-template-columns: 1fr; }
+  .doubt-grid { grid-template-columns: 1fr; }
   .review-band, .run-band { grid-template-columns: 1fr; }
   .review-actions, .run-band > div:first-child { grid-column: auto; }
   .evidence-grid { grid-template-columns: 1fr; }

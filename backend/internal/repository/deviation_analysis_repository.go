@@ -1,6 +1,7 @@
 package repository
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -17,6 +18,24 @@ type DeviationAnalysisRepository interface {
 	Transition(context.Context, uint, string, string, map[string]any) (bool, error)
 	Complete(context.Context, uint, map[string]any) (bool, error)
 	SetReplayVerified(context.Context, uint, bool) error
+	UpsertPhaseDoubtNote(context.Context, PhaseDoubtNoteInput) (model.PhaseDoubtNote, error)
+}
+type PhaseDoubtNoteInput struct {
+	DeviationAnalysisID uint
+	Phase               string
+	Content             string
+	Status              string
+	ActorID             uint
+	ActorName           string
+	Now                 time.Time
+}
+// phaseDoubtNoteOrder 保证四个阶段按 lag/growth/production/harvest 的固定顺序返回，SQLite 与 PostgreSQL 均支持 CASE 排序。
+const phaseDoubtNoteOrder = "CASE phase WHEN 'lag' THEN 0 WHEN 'growth' THEN 1 WHEN 'production' THEN 2 WHEN 'harvest' THEN 3 ELSE 4 END"
+func preloadPhaseDoubtNotes(db *gorm.DB) *gorm.DB {
+	return db.Order(phaseDoubtNoteOrder)
+}
+func preloadDoubtNoteHistory(db *gorm.DB) *gorm.DB {
+	return db.Order("revision ASC, id ASC")
 }
 type deviationAnalysisRepository struct{ db *gorm.DB }
 func NewDeviationAnalysisRepository(db *gorm.DB) DeviationAnalysisRepository {
@@ -34,6 +53,8 @@ func (r *deviationAnalysisRepository) GetByID(ctx context.Context, id uint, prel
 	if preload {
 		query = query.Preload("SensorSeries").Preload("SensorSeries.Vessel").Preload("SensorSeries.Recipe")
 	}
+	query = query.Preload("PhaseDoubtNotes", preloadPhaseDoubtNotes).
+		Preload("PhaseDoubtNotes.History", preloadDoubtNoteHistory)
 	if err := query.First(&analysis, id).Error; err != nil {
 		return model.DeviationAnalysis{}, fmt.Errorf("find deviation analysis %d: %w", id, err)
 	}
@@ -78,6 +99,8 @@ func (r *deviationAnalysisRepository) List(ctx context.Context, query dto.Deviat
 	var analyses []model.DeviationAnalysis
 	offset := (query.Page - 1) * query.PageSize
 	if err := base.Preload("SensorSeries").Preload("SensorSeries.Vessel").Preload("SensorSeries.Recipe").
+		Preload("PhaseDoubtNotes", preloadPhaseDoubtNotes).
+		Preload("PhaseDoubtNotes.History", preloadDoubtNoteHistory).
 		Order("analyzed_at DESC, id DESC").Limit(query.PageSize).Offset(offset).Find(&analyses).Error; err != nil {
 		return nil, 0, fmt.Errorf("list deviation analyses: %w", err)
 	}
@@ -114,6 +137,64 @@ func (r *deviationAnalysisRepository) SetReplayVerified(ctx context.Context, id 
 		return fmt.Errorf("store replay verification for analysis %d: %w", id, err)
 	}
 	return nil
+}
+func (r *deviationAnalysisRepository) UpsertPhaseDoubtNote(
+	ctx context.Context, input PhaseDoubtNoteInput,
+) (model.PhaseDoubtNote, error) {
+	var saved model.PhaseDoubtNote
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing model.PhaseDoubtNote
+		findErr := tx.Where("deviation_analysis_id = ? AND phase = ?", input.DeviationAnalysisID, input.Phase).
+			First(&existing).Error
+		if findErr == nil {
+			existing.Content = input.Content
+			existing.Status = input.Status
+			existing.LatestUpdateAt = input.Now
+			existing.UpdatedBy = input.ActorID
+			existing.UpdatedByName = input.ActorName
+			existing.Revision++
+			existing.UpdatedAt = input.Now
+			if err := tx.Save(&existing).Error; err != nil {
+				return fmt.Errorf("update phase doubt note: %w", err)
+			}
+			history := model.PhaseDoubtNoteHistory{
+				PhaseDoubtNoteID: existing.ID, DeviationAnalysisID: input.DeviationAnalysisID, Phase: input.Phase,
+				Content: input.Content, Status: input.Status, Revision: existing.Revision,
+				RecordedAt: input.Now, RecordedBy: input.ActorID, RecordedByName: input.ActorName, CreatedAt: input.Now,
+			}
+			if err := tx.Create(&history).Error; err != nil {
+				return fmt.Errorf("append phase doubt note history: %w", err)
+			}
+			saved = existing
+			return nil
+		}
+		if !errors.Is(findErr, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("find phase doubt note: %w", findErr)
+		}
+		note := model.PhaseDoubtNote{
+			DeviationAnalysisID: input.DeviationAnalysisID, Phase: input.Phase, Content: input.Content,
+			Status: input.Status, FirstNotedAt: input.Now, FirstNotedBy: input.ActorID,
+			FirstNotedByName: input.ActorName, LatestUpdateAt: input.Now, UpdatedBy: input.ActorID,
+			UpdatedByName: input.ActorName, Revision: 1, CreatedAt: input.Now, UpdatedAt: input.Now,
+		}
+		if err := tx.Create(&note).Error; err != nil {
+			return fmt.Errorf("create phase doubt note: %w", err)
+		}
+		history := model.PhaseDoubtNoteHistory{
+			PhaseDoubtNoteID: note.ID, DeviationAnalysisID: input.DeviationAnalysisID, Phase: input.Phase,
+			Content: input.Content, Status: input.Status, Revision: 1,
+			RecordedAt: input.Now, RecordedBy: input.ActorID, RecordedByName: input.ActorName, CreatedAt: input.Now,
+		}
+		if err := tx.Create(&history).Error; err != nil {
+			return fmt.Errorf("append initial phase doubt note history: %w", err)
+		}
+		saved = note
+		return nil
+	})
+	if err != nil {
+		return model.PhaseDoubtNote{}, err
+	}
+	return saved, nil
 }
 type UserRepository interface {
 	FindByUsername(context.Context, string) (model.User, error)

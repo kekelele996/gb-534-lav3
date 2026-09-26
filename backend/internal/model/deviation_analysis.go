@@ -27,6 +27,7 @@ type DeviationAnalysis struct {
 	ReplayVerified       *bool        `json:"replay_verified,omitempty"`
 	CreatedAt            time.Time    `gorm:"not null" json:"created_at"`
 	UpdatedAt            time.Time    `gorm:"not null" json:"updated_at"`
+	PhaseDoubtNotes      []PhaseDoubtNote `gorm:"foreignKey:DeviationAnalysisID;references:ID" json:"phase_doubt_notes,omitempty"`
 }
 func (DeviationAnalysis) TableName() string                    { return "deviation_analyses" }
 func (a DeviationAnalysis) ReviewerSeparated(userID uint) bool { return a.InitiatedBy != userID }
